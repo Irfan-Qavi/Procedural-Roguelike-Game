@@ -5,7 +5,7 @@ matching 'The Binding of Isaac' dungeon layout requirements.
 """
 import random
 from typing import Dict, List, Tuple
-from config import MIN_ROOMS, MAX_ROOMS
+from config import MIN_ROOMS, MAX_ROOMS, ROOM_GRID_WIDTH, ROOM_GRID_HEIGHT
 from world.room import Room, RoomType
 
 
@@ -114,8 +114,20 @@ class DungeonGenerator:
                 rooms[all_other[1]].room_type = RoomType.TREASURE
                 rooms[all_other[1]].cleared = True
 
-        # 5. Finalize tile structures for doors
-        for room in rooms.values():
+        # 5. Finalize tile structures for doors and populate room props
+        from world.obstacle import Destructible
+        for coord, room in rooms.items():
             room.update_doors()
+            # Populate obstacles in rooms (except Start room)
+            if room.room_type in (RoomType.NORMAL, RoomType.TREASURE):
+                # Place 2 to 4 breakable pots in corners/offsets
+                pot_spots = [
+                    (2, 2), (ROOM_GRID_WIDTH - 3, 2),
+                    (2, ROOM_GRID_HEIGHT - 3), (ROOM_GRID_WIDTH - 3, ROOM_GRID_HEIGHT - 3),
+                    (3, 3), (ROOM_GRID_WIDTH - 4, 3)
+                ]
+                chosen_spots = random.sample(pot_spots, k=random.randint(2, 4))
+                for px, py in chosen_spots:
+                    room.obstacles.append(Destructible(px, py))
 
         return rooms

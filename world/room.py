@@ -119,8 +119,11 @@ class Room:
         return [tile for row in self.tiles for tile in row if tile.tile_type in (TileType.DOOR, TileType.DOOR_LOCKED)]
 
     def draw(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
-        """Render all tiles in this room."""
+        """Render all tiles and obstacles in this room."""
         ox, oy = camera_offset
         for row in self.tiles:
             for tile in row:
                 tile.draw(surface, ox, oy)
+
+        for obs in self.obstacles:
+            obs.draw(surface, camera_offset)
