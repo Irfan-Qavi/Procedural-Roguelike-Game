@@ -170,11 +170,21 @@ class Game:
                         self.player.invulnerable_timer = 0.8
                         self.particles.burst(self.player.pos.x, self.player.pos.y, count=10, color=(255, 60, 60), speed=120.0, size=4.0)
 
-        # Clean dead enemies and check room clearance
+        # Clean dead enemies and check room clearance & loot drops
+        from items.loot import Pickup, PickupType
         for enemy in self.current_room.enemies:
             if enemy.is_dead and not getattr(enemy, "_death_burst", False):
                 enemy._death_burst = True
                 self.particles.burst(enemy.pos.x, enemy.pos.y, count=18, color=enemy.color, speed=140.0, size=5.0)
+
+                # Enemy drop table (45% chance to drop coin, heart, or key)
+                drop_roll = random.random()
+                if drop_roll < 0.22:
+                    self.current_room.pickups.append(Pickup(enemy.pos.x, enemy.pos.y, PickupType.COIN))
+                elif drop_roll < 0.35:
+                    self.current_room.pickups.append(Pickup(enemy.pos.x, enemy.pos.y, PickupType.HEART))
+                elif drop_roll < 0.42:
+                    self.current_room.pickups.append(Pickup(enemy.pos.x, enemy.pos.y, PickupType.KEY))
 
         self.current_room.enemies = [e for e in self.current_room.enemies if not e.is_dead]
         if not self.current_room.enemies and not self.current_room.cleared:
@@ -183,11 +193,35 @@ class Game:
         # Clean dead projectiles
         self.current_room.projectiles = [p for p in self.current_room.projectiles if not p.is_dead]
 
-        # Check for freshly destroyed obstacles and trigger burst
+        # Check for freshly destroyed obstacles and trigger burst + pot drops
         for obs in obstacles:
             if obs.is_destroyed and not getattr(obs, "_burst_triggered", False):
                 obs._burst_triggered = True
                 self.particles.burst(obs.rect.centerx, obs.rect.centery, count=16, color=(160, 110, 65), speed=130.0, size=5.0)
+                # Pot drop chance (35% chance of coin or heart)
+                p_roll = random.random()
+                if p_roll < 0.22:
+                    self.current_room.pickups.append(Pickup(obs.rect.centerx, obs.rect.centery, PickupType.COIN))
+                elif p_roll < 0.35:
+                    self.current_room.pickups.append(Pickup(obs.rect.centerx, obs.rect.centery, PickupType.HEART))
+
+        # Chest interaction
+        for chest in self.current_room.chests:
+            if not chest.is_opened and self.player.hitbox_rect.colliderect(chest.rect):
+                loot = chest.interact(self.player)
+                if loot:
+                    self.current_room.pickups.append(loot)
+                    self.particles.burst(chest.pos.x, chest.pos.y, count=14, color=(255, 220, 80), speed=110.0, size=4.0)
+
+        # Update and collect Pickups
+        for pickup in self.current_room.pickups:
+            pickup.update(dt)
+            if not pickup.is_collected and self.player.hitbox_rect.colliderect(pickup.rect):
+                collected = pickup.apply_to_player(self.player)
+                if collected:
+                    self.particles.burst(pickup.pos.x, pickup.pos.y, count=10, color=(120, 240, 140), speed=90.0, size=3.5)
+
+        self.current_room.pickups = [p for p in self.current_room.pickups if not p.is_collected]
 
         # Update particle emitter
         self.particles.update(dt)
