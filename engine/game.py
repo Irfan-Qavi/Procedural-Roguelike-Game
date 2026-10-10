@@ -21,10 +21,12 @@ from config import (
     ROOM_GRID_HEIGHT,
 )
 from engine.camera import Camera
+from engine.particles import ParticleEmitter
 from world.generator import DungeonGenerator
 from world.room import Room, RoomType
 from world.tile import TileType
 from entities.player import Player
+from entities.projectile import Projectile
 
 
 class Game:
@@ -44,8 +46,9 @@ class Game:
         self.current_coord = (0, 0)
         self.current_room = self.rooms[self.current_coord]
 
-        # Camera setup
+        # Camera & FX setup
         self.camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.particles = ParticleEmitter()
 
         # Player setup - spawn in center of start room
         spawn_x = (ROOM_GRID_WIDTH // 2) * TILE_SIZE + TILE_SIZE // 2
@@ -90,6 +93,24 @@ class Game:
                         self.camera.snap_to(self.player.pos)
                         break
 
+    def handle_player_shooting(self) -> None:
+        """Handle player tear shooting in 4 directions."""
+        shoot_dir = self.player.handle_input()
+        if shoot_dir.length_squared() > 0 and self.player.shoot_timer <= 0:
+            # Spawn projectile slightly offset in shooting direction
+            spawn_pos = self.player.pos + shoot_dir * 16
+            proj = Projectile(
+                spawn_pos.x,
+                spawn_pos.y,
+                shoot_dir,
+                speed=self.player.bullet_speed,
+                damage=self.player.damage,
+                max_range=self.player.bullet_range,
+                is_enemy=False,
+            )
+            self.current_room.projectiles.append(proj)
+            self.player.shoot_timer = self.player.fire_cooldown
+
     def update(self, dt: float) -> None:
         """Update game logic using frame delta time dt."""
         solid_tiles = self.current_room.get_solid_tiles()
@@ -97,6 +118,28 @@ class Game:
 
         # Update Player physics & collisions
         self.player.update(dt, solid_tiles, obstacles)
+
+        # Player shooting
+        self.handle_player_shooting()
+
+        # Update Projectiles
+        for proj in self.current_room.projectiles:
+            hit = proj.update(dt, solid_tiles, obstacles)
+            if hit:
+                # Particle pop upon projectile impact
+                self.particles.burst(proj.pos.x, proj.pos.y, count=5, color=(140, 210, 255), speed=80.0, size=3.0)
+
+        # Clean dead projectiles
+        self.current_room.projectiles = [p for p in self.current_room.projectiles if not p.is_dead]
+
+        # Check for freshly destroyed obstacles and trigger burst
+        for obs in obstacles:
+            if obs.is_destroyed and not getattr(obs, "_burst_triggered", False):
+                obs._burst_triggered = True
+                self.particles.burst(obs.rect.centerx, obs.rect.centery, count=16, color=(160, 110, 65), speed=130.0, size=5.0)
+
+        # Update particle emitter
+        self.particles.update(dt)
 
         # Check door transitions
         self.check_room_transitions()
@@ -162,14 +205,21 @@ class Game:
         # Camera viewport translation
         cam_offset = self.camera.get_offset()
 
-        # Draw room tiles
+        # Draw room tiles & props
         self.current_room.draw(self.screen, cam_offset)
+
+        # Draw projectiles
+        for proj in self.current_room.projectiles:
+            proj.draw(self.screen, cam_offset)
+
+        # Draw particles
+        self.particles.draw(self.screen, cam_offset)
 
         # Draw player
         self.player.draw(self.screen, cam_offset)
 
         # Instructions hint
-        hint_surf = self.font.render("Move: WASD | Map: M | Exit: ESC", True, COLOR_GRAY)
+        hint_surf = self.font.render("Move: WASD | Shoot: Arrow Keys | Map: M | Exit: ESC", True, COLOR_GRAY)
         self.screen.blit(hint_surf, (16, 16))
 
         if self.show_debug_map:
