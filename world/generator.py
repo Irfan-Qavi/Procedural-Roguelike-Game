@@ -5,7 +5,7 @@ matching 'The Binding of Isaac' dungeon layout requirements.
 """
 import random
 from typing import Dict, List, Tuple
-from config import MIN_ROOMS, MAX_ROOMS, ROOM_GRID_WIDTH, ROOM_GRID_HEIGHT
+from config import MIN_ROOMS, MAX_ROOMS, ROOM_GRID_WIDTH, ROOM_GRID_HEIGHT, TILE_SIZE
 from world.room import Room, RoomType
 
 
@@ -114,13 +114,21 @@ class DungeonGenerator:
                 rooms[all_other[1]].room_type = RoomType.TREASURE
                 rooms[all_other[1]].cleared = True
 
-        # 5. Finalize tile structures for doors and populate room props
+        # 5. Finalize tile structures for doors and populate room props & enemies
         from world.obstacle import Destructible
+        from entities.enemy import ChaserEnemy, RangerEnemy, BossEnemy
+
         for coord, room in rooms.items():
             room.update_doors()
-            # Populate obstacles in rooms (except Start room)
-            if room.room_type in (RoomType.NORMAL, RoomType.TREASURE):
-                # Place 2 to 4 breakable pots in corners/offsets
+
+            if room.room_type == RoomType.BOSS:
+                # Spawn Boss at center
+                bx = (ROOM_GRID_WIDTH // 2) * TILE_SIZE + TILE_SIZE // 2
+                by = (ROOM_GRID_HEIGHT // 2) * TILE_SIZE + TILE_SIZE // 2
+                room.enemies.append(BossEnemy(bx, by))
+
+            elif room.room_type == RoomType.NORMAL and coord != (0, 0):
+                # Spawn breakable pots
                 pot_spots = [
                     (2, 2), (ROOM_GRID_WIDTH - 3, 2),
                     (2, ROOM_GRID_HEIGHT - 3), (ROOM_GRID_WIDTH - 3, ROOM_GRID_HEIGHT - 3),
@@ -128,6 +136,27 @@ class DungeonGenerator:
                 ]
                 chosen_spots = random.sample(pot_spots, k=random.randint(2, 4))
                 for px, py in chosen_spots:
+                    room.obstacles.append(Destructible(px, py))
+
+                # Spawn 2 to 4 enemies (mix of Chaser and Ranger)
+                enemy_count = random.randint(2, 4)
+                spawn_positions = [
+                    (3 * TILE_SIZE, 3 * TILE_SIZE),
+                    ((ROOM_GRID_WIDTH - 4) * TILE_SIZE, 3 * TILE_SIZE),
+                    (3 * TILE_SIZE, (ROOM_GRID_HEIGHT - 4) * TILE_SIZE),
+                    ((ROOM_GRID_WIDTH - 4) * TILE_SIZE, (ROOM_GRID_HEIGHT - 4) * TILE_SIZE),
+                ]
+                random.shuffle(spawn_positions)
+                for i in range(min(enemy_count, len(spawn_positions))):
+                    ex, ey = spawn_positions[i]
+                    if random.random() < 0.6:
+                        room.enemies.append(ChaserEnemy(ex, ey))
+                    else:
+                        room.enemies.append(RangerEnemy(ex, ey))
+
+            elif room.room_type == RoomType.TREASURE:
+                # Pots in treasure room
+                for px, py in [(2, 2), (ROOM_GRID_WIDTH - 3, 2)]:
                     room.obstacles.append(Destructible(px, py))
 
         return rooms
