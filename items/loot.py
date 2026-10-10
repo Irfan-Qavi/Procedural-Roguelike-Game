@@ -131,3 +131,66 @@ class Pickup:
             # Swirling blue vortex tear
             pygame.draw.circle(surface, (60, 180, 255), (cx, cy), 8)
             pygame.draw.circle(surface, (255, 255, 255), (cx, cy), 5, 2)
+
+
+class Chest:
+    """Treasure chest containing rewards or stat items."""
+
+    def __init__(self, x: float, y: float, requires_key: bool = False) -> None:
+        self.pos: pygame.math.Vector2 = pygame.math.Vector2(x, y)
+        self.requires_key: bool = requires_key
+        self.is_opened: bool = False
+        self.rect: pygame.Rect = pygame.Rect(int(x - 14), int(y - 12), 28, 24)
+
+    def interact(self, player) -> Optional[Pickup]:
+        """Open chest if unlocked or if player has a key. Returns rewarded pickup."""
+        if self.is_opened:
+            return None
+
+        if self.requires_key:
+            if player.keys > 0:
+                player.keys -= 1
+                self.is_opened = True
+            else:
+                return None  # Locked, no key
+        else:
+            self.is_opened = True
+
+        # Drop either high-tier stat or assorted goodies
+        choices = [
+            PickupType.STAT_DAMAGE,
+            PickupType.STAT_SPEED,
+            PickupType.STAT_TEAR_RATE,
+            PickupType.HEART,
+            PickupType.KEY,
+        ]
+        chosen = random.choice(choices)
+        return Pickup(self.pos.x, self.pos.y + 16, chosen)
+
+    def draw(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
+        """Render wooden or gilded treasure chest."""
+        ox, oy = camera_offset
+        dest = self.rect.copy()
+        dest.x += ox
+        dest.y += oy
+
+        # Shadow
+        pygame.draw.ellipse(surface, (15, 12, 20), (dest.x - 2, dest.bottom - 4, dest.width + 4, 8))
+
+        if not self.is_opened:
+            # Chest base & lid
+            pygame.draw.rect(surface, COLOR_CHEST, dest, border_radius=3)
+            pygame.draw.rect(surface, COLOR_CHEST_OUTLINE, dest, width=2, border_radius=3)
+            # Gold bands
+            pygame.draw.line(surface, (250, 210, 80), (dest.x + 6, dest.top), (dest.x + 6, dest.bottom), 2)
+            pygame.draw.line(surface, (250, 210, 80), (dest.right - 7, dest.top), (dest.right - 7, dest.bottom), 2)
+            # Lock emblem
+            lock_color = (220, 50, 50) if self.requires_key else (80, 50, 20)
+            pygame.draw.rect(surface, lock_color, (dest.centerx - 3, dest.centery - 2, 6, 6))
+        else:
+            # Open chest
+            lower_rect = pygame.Rect(dest.x, dest.y + 8, dest.width, dest.height - 8)
+            pygame.draw.rect(surface, (60, 40, 20), lower_rect, border_radius=2)
+            pygame.draw.rect(surface, COLOR_CHEST_OUTLINE, lower_rect, width=2, border_radius=2)
+            # Open lid tilted up
+            pygame.draw.rect(surface, COLOR_CHEST, (dest.x, dest.y - 2, dest.width, 8), border_radius=2)
