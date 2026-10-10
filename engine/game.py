@@ -4,9 +4,27 @@ Houses the core Game class, main game loop, frame-rate timing, and event dispatc
 """
 import sys
 import pygame
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, COLOR_BG, COLOR_WHITE, COLOR_GRAY, COLOR_MINIMAP_BOSS, COLOR_MINIMAP_TREASURE, COLOR_MINIMAP_CURRENT, COLOR_MINIMAP_ROOM
+from config import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    FPS,
+    TITLE,
+    COLOR_BG,
+    COLOR_WHITE,
+    COLOR_GRAY,
+    COLOR_MINIMAP_BOSS,
+    COLOR_MINIMAP_TREASURE,
+    COLOR_MINIMAP_CURRENT,
+    COLOR_MINIMAP_ROOM,
+    TILE_SIZE,
+    ROOM_GRID_WIDTH,
+    ROOM_GRID_HEIGHT,
+)
+from engine.camera import Camera
 from world.generator import DungeonGenerator
 from world.room import Room, RoomType
+from world.tile import TileType
+from entities.player import Player
 
 
 class Game:
@@ -26,6 +44,15 @@ class Game:
         self.current_coord = (0, 0)
         self.current_room = self.rooms[self.current_coord]
 
+        # Camera setup
+        self.camera = Camera(SCREEN_WIDTH, SCREEN_HEIGHT)
+
+        # Player setup - spawn in center of start room
+        spawn_x = (ROOM_GRID_WIDTH // 2) * TILE_SIZE + TILE_SIZE // 2
+        spawn_y = (ROOM_GRID_HEIGHT // 2) * TILE_SIZE + TILE_SIZE // 2
+        self.player = Player(spawn_x, spawn_y)
+        self.camera.snap_to(self.player.pos)
+
         # Debug mode for map-wide inspection
         self.show_debug_map: bool = False
         self.font = pygame.font.SysFont("Arial", 16, bold=True)
@@ -41,9 +68,41 @@ class Game:
                 elif event.key == pygame.K_m:
                     self.show_debug_map = not self.show_debug_map
 
+    def check_room_transitions(self) -> None:
+        """Check if player stepped onto an active door tile to switch rooms."""
+        door_tiles = self.current_room.get_door_tiles()
+        for tile in door_tiles:
+            if tile.tile_type == TileType.DOOR and self.player.hitbox_rect.colliderect(tile.rect):
+                dir_name = tile.door_direction
+                if dir_name and self.current_room.doors.get(dir_name) is not None:
+                    next_coord = self.current_room.doors[dir_name]
+                    if next_coord in self.rooms:
+                        # Change room
+                        self.current_coord = next_coord
+                        self.current_room = self.rooms[self.current_coord]
+                        self.current_room.visited = True
+
+                        # Position player entering from opposite doorway
+                        opp_dir = {"N": "S", "S": "N", "E": "W", "W": "E"}[dir_name]
+                        new_pos = self.current_room.get_door_spawn_pos(opp_dir)
+                        self.player.pos = pygame.math.Vector2(new_pos)
+                        self.player.update_hitbox()
+                        self.camera.snap_to(self.player.pos)
+                        break
+
     def update(self, dt: float) -> None:
         """Update game logic using frame delta time dt."""
-        pass
+        solid_tiles = self.current_room.get_solid_tiles()
+        obstacles = self.current_room.obstacles
+
+        # Update Player physics & collisions
+        self.player.update(dt, solid_tiles, obstacles)
+
+        # Check door transitions
+        self.check_room_transitions()
+
+        # Update Camera following player
+        self.camera.update(self.player.pos, dt)
 
     def render_debug_map(self) -> None:
         """Render dungeon layout overview across whole screen."""
@@ -100,13 +159,17 @@ class Game:
         """Clear and draw frame to display surface."""
         self.screen.fill(COLOR_BG)
 
-        # Center room on screen for now
-        offset_x = (SCREEN_WIDTH - 15 * 48) // 2
-        offset_y = (SCREEN_HEIGHT - 11 * 48) // 2
-        self.current_room.draw(self.screen, (offset_x, offset_y))
+        # Camera viewport translation
+        cam_offset = self.camera.get_offset()
+
+        # Draw room tiles
+        self.current_room.draw(self.screen, cam_offset)
+
+        # Draw player
+        self.player.draw(self.screen, cam_offset)
 
         # Instructions hint
-        hint_surf = self.font.render("Press 'M' to inspect procedural map graph", True, COLOR_GRAY)
+        hint_surf = self.font.render("Move: WASD | Map: M | Exit: ESC", True, COLOR_GRAY)
         self.screen.blit(hint_surf, (16, 16))
 
         if self.show_debug_map:
