@@ -41,6 +41,7 @@ class Room:
         self.projectiles: list = []
         self.obstacles: list = []  # Breakables (pots/crates)
         self.pickups: list = []    # Hearts, coins, keys, items
+        self.chests: list = []     # Treasure chests
 
         # Tiles grid: 2D list [y][x]
         self.tiles: List[List[Tile]] = []
@@ -119,7 +120,7 @@ class Room:
         return [tile for row in self.tiles for tile in row if tile.tile_type in (TileType.DOOR, TileType.DOOR_LOCKED)]
 
     def draw(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
-        """Render all tiles and obstacles in this room."""
+        """Render all tiles, obstacles, chests and pickups in this room."""
         ox, oy = camera_offset
         for row in self.tiles:
             for tile in row:
@@ -127,3 +128,9 @@ class Room:
 
         for obs in self.obstacles:
             obs.draw(surface, camera_offset)
+
+        for chest in self.chests:
+            chest.draw(surface, camera_offset)
+
+        for pickup in self.pickups:
+            pickup.draw(surface, camera_offset)

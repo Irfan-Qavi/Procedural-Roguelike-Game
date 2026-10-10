@@ -158,5 +158,10 @@ class DungeonGenerator:
                 # Pots in treasure room
                 for px, py in [(2, 2), (ROOM_GRID_WIDTH - 3, 2)]:
                     room.obstacles.append(Destructible(px, py))
+                # Spawn guaranteed Golden Item Chest in center of Treasure Room
+                from items.loot import Chest
+                cx = (ROOM_GRID_WIDTH // 2) * TILE_SIZE + TILE_SIZE // 2
+                cy = (ROOM_GRID_HEIGHT // 2) * TILE_SIZE + TILE_SIZE // 2
+                room.chests.append(Chest(cx, cy, requires_key=False))
 
         return rooms
