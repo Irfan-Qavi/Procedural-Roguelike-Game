@@ -110,6 +110,14 @@ class Room:
             return pygame.math.Vector2((ROOM_GRID_WIDTH - 1.6) * TILE_SIZE, mid_y)
         return pygame.math.Vector2(mid_x, mid_y)
 
+    def get_solid_tiles(self) -> List[Tile]:
+        """Return list of all solid barrier tiles in this room."""
+        return [tile for row in self.tiles for tile in row if tile.is_solid]
+
+    def get_door_tiles(self) -> List[Tile]:
+        """Return list of all door tiles in this room."""
+        return [tile for row in self.tiles for tile in row if tile.tile_type in (TileType.DOOR, TileType.DOOR_LOCKED)]
+
     def draw(self, surface: pygame.Surface, camera_offset: Tuple[int, int]) -> None:
         """Render all tiles in this room."""
         ox, oy = camera_offset
