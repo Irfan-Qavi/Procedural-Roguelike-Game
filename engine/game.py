@@ -177,6 +177,20 @@ class Game:
         # Update Player physics & collisions
         self.player.update(dt, solid_tiles, obstacles)
 
+        # Footstep dust particles when moving
+        if self.player.vel.length_squared() > 1200:
+            if random.random() < 0.25:
+                foot_offset = pygame.math.Vector2(random.uniform(-6, 6), 10)
+                self.particles.burst(
+                    self.player.pos.x + foot_offset.x,
+                    self.player.pos.y + foot_offset.y,
+                    count=1,
+                    color=(95, 90, 110),
+                    speed=15.0,
+                    size=3.0,
+                    lifetime=0.25,
+                )
+
         # Check Player Death
         if self.player.is_dead:
             self.state = GameState.GAME_OVER
