@@ -116,6 +116,12 @@ class Game:
         solid_tiles = self.current_room.get_solid_tiles()
         obstacles = self.current_room.obstacles
 
+        # Build blocked cells set for enemy pathfinding
+        blocked_cells = {(t.grid_x, t.grid_y) for t in solid_tiles}
+        for obs in obstacles:
+            if not obs.is_destroyed:
+                blocked_cells.add((obs.grid_x, obs.grid_y))
+
         # Update Player physics & collisions
         self.player.update(dt, solid_tiles, obstacles)
 
@@ -129,6 +135,51 @@ class Game:
                 # Particle pop upon projectile impact
                 self.particles.burst(proj.pos.x, proj.pos.y, count=5, color=(140, 210, 255), speed=80.0, size=3.0)
 
+            # Bullet-to-Entity collision checks
+            if not proj.is_dead:
+                if not proj.is_enemy:
+                    # Player tear hitting enemy
+                    for enemy in self.current_room.enemies:
+                        if not enemy.is_dead and enemy.hitbox_rect.colliderect(proj.rect):
+                            proj.is_dead = True
+                            knockback = proj.vel.normalize() * 120.0 if proj.vel.length_squared() > 0 else None
+                            enemy.take_damage(proj.damage, knockback)
+                            self.particles.burst(proj.pos.x, proj.pos.y, count=8, color=(220, 60, 60), speed=100.0, size=3.5)
+                            break
+                else:
+                    # Enemy bullet hitting player
+                    if self.player.hitbox_rect.colliderect(proj.rect):
+                        proj.is_dead = True
+                        knockback = proj.vel.normalize() * 140.0 if proj.vel.length_squared() > 0 else None
+                        damaged = self.player.take_damage(proj.damage, knockback)
+                        if damaged:
+                            self.player.invulnerable_timer = 0.8
+                            self.particles.burst(self.player.pos.x, self.player.pos.y, count=10, color=(255, 60, 60), speed=120.0, size=4.0)
+
+        # Update Enemies
+        for enemy in self.current_room.enemies:
+            if not enemy.is_dead:
+                enemy.update_ai(dt, self.player.pos, blocked_cells, self.current_room.projectiles)
+                enemy.move_and_collide(dt, solid_tiles, obstacles)
+
+                # Enemy melee collision with player
+                if enemy.hitbox_rect.colliderect(self.player.hitbox_rect):
+                    knockback = (self.player.pos - enemy.pos).normalize() * 160.0 if (self.player.pos - enemy.pos).length_squared() > 0 else None
+                    damaged = self.player.take_damage(enemy.damage_amount, knockback)
+                    if damaged:
+                        self.player.invulnerable_timer = 0.8
+                        self.particles.burst(self.player.pos.x, self.player.pos.y, count=10, color=(255, 60, 60), speed=120.0, size=4.0)
+
+        # Clean dead enemies and check room clearance
+        for enemy in self.current_room.enemies:
+            if enemy.is_dead and not getattr(enemy, "_death_burst", False):
+                enemy._death_burst = True
+                self.particles.burst(enemy.pos.x, enemy.pos.y, count=18, color=enemy.color, speed=140.0, size=5.0)
+
+        self.current_room.enemies = [e for e in self.current_room.enemies if not e.is_dead]
+        if not self.current_room.enemies and not self.current_room.cleared:
+            self.current_room.cleared = True
+
         # Clean dead projectiles
         self.current_room.projectiles = [p for p in self.current_room.projectiles if not p.is_dead]
 
@@ -141,8 +192,9 @@ class Game:
         # Update particle emitter
         self.particles.update(dt)
 
-        # Check door transitions
-        self.check_room_transitions()
+        # Check door transitions (doors only open when room is cleared of active enemies)
+        if self.current_room.cleared:
+            self.check_room_transitions()
 
         # Update Camera following player
         self.camera.update(self.player.pos, dt)
@@ -211,6 +263,10 @@ class Game:
         # Draw projectiles
         for proj in self.current_room.projectiles:
             proj.draw(self.screen, cam_offset)
+
+        # Draw enemies
+        for enemy in self.current_room.enemies:
+            enemy.draw(self.screen, cam_offset)
 
         # Draw particles
         self.particles.draw(self.screen, cam_offset)
