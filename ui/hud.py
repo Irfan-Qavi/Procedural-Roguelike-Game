@@ -87,6 +87,83 @@ class HUD:
         surface.blit(dmg_txt, (start_x, sy))
         surface.blit(spd_txt, (start_x, sy + 18))
         surface.blit(rate_txt, (start_x, sy + 36))
-    def draw(self, surface: pygame.Surface, player, rooms, current_coord) -> None:
-        self.draw_hearts(surface, player.health, player.max_health)
+
+    def draw_minimap(
+        self,
+        surface: pygame.Surface,
+        rooms: Dict[Tuple[int, int], Room],
+        current_coord: Tuple[int, int],
+    ) -> None:
+        """Draw top-right minimap showing visited/connected rooms."""
+        mm_w = 144
+        mm_h = 114
+        mm_x = SCREEN_WIDTH - mm_w - 20
+        mm_y = 20
+
+        # Background frame
+        bg_surface = pygame.Surface((mm_w, mm_h), pygame.SRCALPHA)
+        bg_surface.fill(COLOR_MINIMAP_BG)
+        surface.blit(bg_surface, (mm_x, mm_y))
+        pygame.draw.rect(surface, (80, 75, 100), (mm_x, mm_y, mm_w, mm_h), 2, border_radius=4)
+
+        # Center on current room
+        center_x = mm_x + mm_w // 2
+        center_y = mm_y + mm_h // 2
+        cell_size = 14
+        step = 20
+
+        for coord, room in rooms.items():
+            # Only draw room if it was visited, or if adjacent to a visited room
+            is_adjacent_to_visited = any(
+                rooms.get((coord[0] + dx, coord[1] + dy)) and rooms[(coord[0] + dx, coord[1] + dy)].visited
+                for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
+            )
+
+            if not room.visited and not is_adjacent_to_visited:
+                continue
+
+            rel_x = coord[0] - current_coord[0]
+            rel_y = coord[1] - current_coord[1]
+            rx = center_x + rel_x * step - cell_size // 2
+            ry = center_y + rel_y * step - cell_size // 2
+
+            # Clip within minimap box
+            if rx < mm_x + 4 or rx + cell_size > mm_x + mm_w - 4 or ry < mm_y + 4 or ry + cell_size > mm_y + mm_h - 4:
+                continue
+
+            rect = pygame.Rect(rx, ry, cell_size, cell_size)
+
+            if coord == current_coord:
+                color = COLOR_MINIMAP_CURRENT
+            elif not room.visited:
+                color = (45, 45, 60)  # Unvisited neighbor silhouette
+            elif room.room_type == RoomType.BOSS:
+                color = COLOR_MINIMAP_BOSS
+            elif room.room_type == RoomType.TREASURE:
+                color = COLOR_MINIMAP_TREASURE
+            else:
+                color = COLOR_MINIMAP_ROOM
+
+            pygame.draw.rect(surface, color, rect, border_radius=2)
+            pygame.draw.rect(surface, (20, 20, 25), rect, 1, border_radius=2)
+
+            # Icon letters for Boss / Treasure
+            if room.visited:
+                if room.room_type == RoomType.BOSS:
+                    b_txt = self.small_font.render("B", True, (255, 255, 255))
+                    surface.blit(b_txt, (rx + 2, ry - 1))
+                elif room.room_type == RoomType.TREASURE:
+                    t_txt = self.small_font.render("T", True, (20, 20, 20))
+                    surface.blit(t_txt, (rx + 2, ry - 1))
+
+    def draw(
+        self,
+        surface: pygame.Surface,
+        player,
+        rooms: Dict[Tuple[int, int], Room],
+        current_coord: Tuple[int, int],
+    ) -> None:
+        """Render complete HUD."""
+        self.draw_hearts(surface, int(player.health), int(player.max_health))
         self.draw_inventory(surface, player)
+        self.draw_minimap(surface, rooms, current_coord)
